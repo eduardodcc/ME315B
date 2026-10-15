@@ -1,0 +1,82 @@
+---
+title: "Lab09"
+author: "Eduardo de Castro"
+format: 
+  pdf:
+    toc: true
+engine: knitr
+---
+*Relatório gerado em: `r format(Sys.time(), '%d/%m/%Y às %H:%M')`*
+
+```{r setup, include=FALSE}
+library(reticulate)
+use_virtualenv("r-reticulate", required = TRUE)
+```
+
+```{python}
+# reticulate::py_run_string("import polars as pl; print(pl.__version__)")
+# no console pra rodar o python porque se nao, nao compila
+
+import polars as pl
+
+# Carregamento dos datasets com tratamento de valores nulos (\N) e separadores por tabulação
+
+basics = pl.read_csv("datasets/title.basics0.tsv.gz", separator="\t", null_values=["\\N"])
+
+ratings = pl.read_csv("datasets/title.ratings.tsv.gz", separator="\t", null_values=["\\N"])
+
+principals = pl.read_csv("datasets/title.principals0.tsv.gz", separator="\t", null_values=["\\N"])
+```
+
+Questão 1: Quais são os 5 filmes com as maiores notas (averageRating)? Apresente uma solução capaz de desempatar os filmes baseando-se no número de votos recebidos.
+
+```{python}
+top_5_movies = (
+    ratings
+    .join(basics, on="tconst")
+    .sort(["averageRating", "numVotes"], descending=[True, True])
+    .head(5)
+)
+
+print("--- 5 Filmes com Maiores Notas ---")
+print(top_5_movies.select(["tconst", "primaryTitle", "averageRating", "numVotes"]))
+```
+
+Questão 2: Qual é o gênero mais frequente entre os filmes com nota maior que 8?
+
+```{python}
+top_genre = (
+    ratings
+    .filter(pl.col("averageRating") > 8.0)
+    .join(basics, on="tconst") 
+    .select(pl.col("genres").str.split(",").alias("genre_list"))
+    .explode("genre_list")
+    .filter(pl.col("genre_list").is_not_null() & (pl.col("genre_list") != ""))
+    .group_by("genre_list")
+    .len()
+    .sort("len", descending=True) #mais pro menos frequente
+    .head(1) #o mais frequente
+)
+
+print("--- Gênero Mais Frequente (Notas > 8) ---")
+print(top_genre)
+```
+
+Questão 3: Quais são os 3 atores/atrizes que mais participaram de filmes com nota maior que 7.5?
+
+```{python}
+top_actors = (
+    ratings
+    .filter(pl.col("averageRating") > 7.5)
+    .join(principals, on="tconst") #juncao
+    .filter(pl.col("category").is_in(["actor", "actress"]))
+    .group_by("nconst")
+    .len()
+    .sort("len", descending=True) #maior pro menor
+    .head(3) #tres maiores
+)
+
+print("--- Top 3 Atores/Atrizes (Notas > 7.5) ---")
+print(top_actors)
+
+```
